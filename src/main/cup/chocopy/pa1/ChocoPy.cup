@@ -142,7 +142,7 @@ action code {:
  * semantic value of type <type> for these symbols that may be referenced
  * in actions ( {: ... :} ).
  */
-terminal NEWLINE;
+terminal NEWLINE, INDENT, DEDENT;
 terminal String PLUS; 
 terminal Integer NUMBER; 
 /* Returned by the lexer for erroneous tokens.  Since it does not appear in
