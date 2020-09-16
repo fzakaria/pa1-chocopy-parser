@@ -143,8 +143,7 @@ action code {:
  * in actions ( {: ... :} ).
  */
 terminal NEWLINE, INDENT, DEDENT;
-terminal String PLUS; 
-terminal Integer NUMBER;
+terminal Integer INTEGER;
 terminal String STRING;
 
 /* keywords */
@@ -152,6 +151,12 @@ terminal FALSE, NONE, TRUE, AND, AS, ASSERT, ASYNC, AWAIT, BREAK,
          CLASS, CONTINUE, DEF, DEL, ELIF, ELSE, EXCEPT, FINALLY, FOR, FROM,
          GLOBAL, IF, IMPORT, IN, IS, LAMBDA, NONLOCAL, NOT, OR, PASS, RAISE,
          RETURN, TRY, WHILE, WITH, YIELD, UNUSED;
+
+/* operators */
+terminal String PLUS, MINUS, TIMES, IDIV, MOD, LT, GT, LEQ, GEQ, EQEQ, NEQ;
+
+/* others */
+terminal EQ, LPAREN, RPAREN, LINDEX, RINDEX, COMMA, COLON, DOT, ARROW;
 
 /* Returned by the lexer for erroneous tokens.  Since it does not appear in
  * the grammar, it indicates a syntax error. */
@@ -210,7 +215,7 @@ expr_stmt ::= expr:e    {: RESULT = new ExprStmt(exleft, exright, e); :}
             ;
 
 expr ::= binary_expr:e  {: RESULT = e; :}
-       | NUMBER:n       {: RESULT = new IntegerLiteral(nxleft, nxright, n); :}
+       | INTEGER:n       {: RESULT = new IntegerLiteral(nxleft, nxright, n); :}
        ;
 
 

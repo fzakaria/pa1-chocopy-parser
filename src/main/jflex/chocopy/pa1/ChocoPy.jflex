@@ -157,7 +157,7 @@ CommentLine = {WhiteSpace}*{Comment}
   {Comment}                   { yybegin(YYINITIAL); /* ignore */  }
 
   /* Literals. */
-  {IntegerLiteral}            { return symbol(ChocoPyTokens.NUMBER,
+  {IntegerLiteral}            { return symbol(ChocoPyTokens.INTEGER,
                                                Integer.parseInt(yytext())); }
 
   /* String
@@ -203,6 +203,29 @@ CommentLine = {WhiteSpace}*{Comment}
   "with"                        { return symbol(ChocoPyTokens.WITH); }
   "yield"                       { return symbol(ChocoPyTokens.YIELD); }
 
+  /* Operators. */
+  "+"                           { return symbol(ChocoPyTokens.PLUS); }
+  "-"                           { return symbol(ChocoPyTokens.MINUS); }
+  "*"                           { return symbol(ChocoPyTokens.TIMES); }
+  "//"                          { return symbol(ChocoPyTokens.IDIV); }
+  "%"                           { return symbol(ChocoPyTokens.MOD); }
+  "<"                           { return symbol(ChocoPyTokens.LT); }
+  ">"                           { return symbol(ChocoPyTokens.GT); }
+  "<="                          { return symbol(ChocoPyTokens.LEQ); }
+  ">="                          { return symbol(ChocoPyTokens.GEQ); }
+  "=="                          { return symbol(ChocoPyTokens.EQEQ); }
+  "!="                          { return symbol(ChocoPyTokens.NEQ); }
+
+  /* Others. */
+  "="                           { return symbol(ChocoPyTokens.EQ); }
+  "("                           { return symbol(ChocoPyTokens.LPAREN); }
+  ")"                           { return symbol(ChocoPyTokens.RPAREN); }
+  "["                          { return symbol(ChocoPyTokens.LINDEX); }
+  "]"                           { return symbol(ChocoPyTokens.RINDEX); }
+  ","                           { return symbol(ChocoPyTokens.COMMA); }
+  ":"                           { return symbol(ChocoPyTokens.COLON); }
+  "."                          { return symbol(ChocoPyTokens.DOT); }
+  "->"                           { return symbol(ChocoPyTokens.ARROW); }
 
   {WhiteSpace}                  { /* Do nothing. */ }
 }
