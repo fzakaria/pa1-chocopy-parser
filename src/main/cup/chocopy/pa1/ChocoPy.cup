@@ -144,7 +144,15 @@ action code {:
  */
 terminal NEWLINE, INDENT, DEDENT;
 terminal String PLUS; 
-terminal Integer NUMBER; 
+terminal Integer NUMBER;
+terminal String STRING;
+
+/* keywords */
+terminal FALSE, NONE, TRUE, AND, AS, ASSERT, ASYNC, AWAIT, BREAK,
+         CLASS, CONTINUE, DEF, DEL, ELIF, ELSE, EXCEPT, FINALLY, FOR, FROM,
+         GLOBAL, IF, IMPORT, IN, IS, LAMBDA, NONLOCAL, NOT, OR, PASS, RAISE,
+         RETURN, TRY, WHILE, WITH, YIELD, UNUSED;
+
 /* Returned by the lexer for erroneous tokens.  Since it does not appear in
  * the grammar, it indicates a syntax error. */
 terminal UNRECOGNIZED;   

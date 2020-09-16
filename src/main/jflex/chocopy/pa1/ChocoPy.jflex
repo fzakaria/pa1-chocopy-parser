@@ -38,6 +38,12 @@ import java.io.StringReader;
     /** Track our indentation level. */
     final Stack<Integer> indentations = new Stack<>();
 
+    /** The current indentation (# of spaces) **/
+    int indentation = 0;
+
+    /** String buffer to hold literals. */
+    StringBuffer string = new StringBuffer();
+
     /** Return a terminal symbol of syntactic category TYPE and no
      *  semantic value at the current source location. */
     private Symbol symbol(int type) {
@@ -53,66 +59,14 @@ import java.io.StringReader;
             value);
     }
 
-    /* Calcualte the indentation level according to the Python language grammer.
-       1. Leading whitespace is used to compute the indentation.
-       2. Tabs are replaced (left -> right) into a number between [1, 8] such that the current number of spaces
-          is divisible by 8.
-       3. The total number of spaces determines the indentation.
-    */
-    private Symbol calculateIndentation(String whitespace) {
-        // lets safeguard against being called improperly
-        assert whitespace.isBlank() : "This was called with a non whitespace string";
-        int indentation = 0;
-        for (char c : whitespace.toCharArray()) {
-            switch (c) {
-                case '\t':
-                    for (int i = 1; i <= 8; i++) {
-                        if ( (indentation + i) % 8 == 0) {
-                          indentation += i;
-                          break;
-                        }
-                    }
-                    throw new IllegalArgumentException("Could not find a tabstop length.");
-                case ' ':
-                    indentation += 1;
-                    break;
-                default:
-                    throw new IllegalArgumentException("Unknown whitespace character.");
-            }
-        }
-
-        yybegin(LOGICAL_LINE);
-
-        // case 1: If it is equal, nothing happens.
-        if (indentations.peek() == indentation) {
-            return null;
-        }
-
-        // case 2: If it is larger, it is pushed on the stack, and one INDENT token is generated
-        if (indentation > indentations.peek()) {
-            indentations.push(indentation);
-            return symbol(ChocoPyTokens.INDENT);
-        }
-
-        // case 3: If it is smaller, it must be one of the numbers occurring on the stack; all numbers on the stack
-        //         that are larger are popped off, and for each number popped off a DEDENT token is generated.
-        if (indentation < indentations.peek()) {
-            indentations.pop();
-            // reset the whitespace read; this causes us to potentially emit multiple dedents
-            yypushback(yylength());
-            yybegin(YYINITIAL);
-
-            // if it is larger than the top of the stack; then we have the wrong indentation numbers
-            // lets put a UNRECOGNIZED
-            if (indentation > indentations.peek()) {
-                return symbol(ChocoPyTokens.UNRECOGNIZED);
-            }
-            return symbol(ChocoPyTokens.DEDENT);
-        }
-
-        throw new IllegalStateException("Should never hit here");
+    private Symbol symbol(String value) {
+        int type = ChocoPyTokens.STRING;
+        int column = yycolumn - value.length();
+        return symbolFactory.newSymbol(ChocoPyTokens.terminalNames[type], type,
+            new ComplexSymbolFactory.Location(yyline + 1, column),
+            new ComplexSymbolFactory.Location(yyline + 1, column + value.length()),
+            value);
     }
-
 %}
 
 /* The code enclosed in %init{ and %init} is copied verbatim into the constructor of the generated class. */
@@ -128,31 +82,70 @@ LineBreak  = \r|\n|\r\n
 InputCharacter = [^\r\n]
 Comment = #{InputCharacter}*{LineBreak}?
 IntegerLiteral = 0 | [1-9][0-9]*
+StringCharacter = [^\r\n\"\\]
+StringLiteral = \" ({StringCharacter} | \\t | \\n | \\ | \\\") * \"
 
 /* A logical line is a non-blank line that is not a comment. */
 LogicalLine = {WhiteSpace}*[[^ \t]--#]
 CommentLine = {WhiteSpace}*{Comment}
 
+
 %state LOGICAL_LINE
+%state INDENT
 %%
 
 
 <YYINITIAL> {
 
-  /* This must bea blank line. */
+  /* This must be a blank line. */
   {LineBreak}                { /* ignore */ }
 
   /* Comments. Comments will not print out a NEWLINE symbol. */
   {CommentLine}                  { /* ignore */  }
 
-  /* Whitespace. A logical line is a physical line that contains at least one token that is not whitespace or comments. */
+  /* A logical line is a physical line that contains at least one token that is not whitespace or comments. */
   {LogicalLine}                {
-                                        yypushback(1); // put back the character read
-                                        final Symbol sym = calculateIndentation(yytext());
-                                        if (sym != null) {
-                                            return sym;
-                                        }
+                                    indentation = 0;
+                                    // put back the characters to read
+                                    yypushback(yylength());
+                                    yybegin(INDENT);
                                }
+}
+
+<INDENT> {
+
+    " "                       {
+                                indentation += 1;
+                              }
+
+    \t                        {
+                                // convert a tab to the number of spaces needed so that it's divisible by 8
+                                indentation += (8 - (indentation % 8));
+                              }
+
+    /* Anything. */
+    .                         {
+                                // push back the entry so that it can re-read
+                                yypushback(1);
+
+                                // case 1: If it is larger, it is pushed on the stack, and one INDENT token is generated
+                                if (indentation > indentations.peek()) {
+                                    indentations.push(indentation);
+                                    yybegin(LOGICAL_LINE);
+                                    return symbol(ChocoPyTokens.INDENT);
+                                }
+
+                                // case 2: If it is smaller, pop one off the stack.
+                                if (indentation < indentations.peek()) {
+                                    indentations.pop();
+                                    return symbol(ChocoPyTokens.DEDENT);
+                                }
+
+                                // case 3: If it is the same, then do not emit anything
+                                if (indentation == indentations.peek()) {
+                                    yybegin(LOGICAL_LINE);
+                                }
+                              }
 }
 
 <LOGICAL_LINE> {
@@ -166,6 +159,52 @@ CommentLine = {WhiteSpace}*{Comment}
   /* Literals. */
   {IntegerLiteral}            { return symbol(ChocoPyTokens.NUMBER,
                                                Integer.parseInt(yytext())); }
+
+  /* String
+    Done as a single regex so that the debug printing that uses yytext looks correct.
+    @see https://stackoverflow.com/a/29685286/143733
+  */
+  {StringLiteral}              { return symbol(ChocoPyTokens.STRING, yytext()); }
+
+  /* Keywords */
+  "False"                       { return symbol(ChocoPyTokens.FALSE); }
+  "None"                        { return symbol(ChocoPyTokens.NONE); }
+  "True"                        { return symbol(ChocoPyTokens.TRUE); }
+  "and"                         { return symbol(ChocoPyTokens.AND); }
+  "as"                          { return symbol(ChocoPyTokens.AS); }
+  "assert"                      { return symbol(ChocoPyTokens.ASSERT); }
+  "async"                       { return symbol(ChocoPyTokens.UNUSED); }
+  "await"                       { return symbol(ChocoPyTokens.UNUSED); }
+  "break"                       { return symbol(ChocoPyTokens.BREAK); }
+  "class"                       { return symbol(ChocoPyTokens.CLASS); }
+  "continue"                    { return symbol(ChocoPyTokens.CONTINUE); }
+  "def"                         { return symbol(ChocoPyTokens.DEF); }
+  "del"                         { return symbol(ChocoPyTokens.DEL); }
+  "elif"                        { return symbol(ChocoPyTokens.ELIF); }
+  "else"                        { return symbol(ChocoPyTokens.ELSE); }
+  "except"                      { return symbol(ChocoPyTokens.EXCEPT); }
+  "finally"                     { return symbol(ChocoPyTokens.FINALLY); }
+  "for"                         { return symbol(ChocoPyTokens.FOR); }
+  "from"                        { return symbol(ChocoPyTokens.FROM); }
+  "global"                      { return symbol(ChocoPyTokens.GLOBAL); }
+  "if"                          { return symbol(ChocoPyTokens.IF); }
+  "import"                      { return symbol(ChocoPyTokens.IMPORT); }
+  "in"                          { return symbol(ChocoPyTokens.IN); }
+  "is"                          { return symbol(ChocoPyTokens.IS); }
+  "lambda"                      { return symbol(ChocoPyTokens.LAMBDA); }
+  "nonlocal"                    { return symbol(ChocoPyTokens.NONLOCAL); }
+  "not"                         { return symbol(ChocoPyTokens.NOT); }
+  "or"                          { return symbol(ChocoPyTokens.OR); }
+  "pass"                        { return symbol(ChocoPyTokens.PASS); }
+  "raise"                       { return symbol(ChocoPyTokens.RAISE); }
+  "return"                      { return symbol(ChocoPyTokens.RETURN); }
+  "try"                         { return symbol(ChocoPyTokens.TRY); }
+  "while"                       { return symbol(ChocoPyTokens.WHILE); }
+  "with"                        { return symbol(ChocoPyTokens.WITH); }
+  "yield"                       { return symbol(ChocoPyTokens.YIELD); }
+
+
+  {WhiteSpace}                  { /* Do nothing. */ }
 }
 
 <<EOF>>                       {
@@ -174,9 +213,7 @@ CommentLine = {WhiteSpace}*{Comment}
 
                                     int line = yyline;
                                     int column = yycolumn;
-                                    yyreset(new StringReader(""));
-                                    yyline = line;
-                                    yycolumn = column;
+                                    zzAtEOF = false;
                                     return symbol(ChocoPyTokens.DEDENT);
                                 }
                                 return symbol(ChocoPyTokens.EOF);
